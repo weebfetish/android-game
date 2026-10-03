@@ -22,6 +22,8 @@ func _run() -> void:
 	_check(state != null, "GameState autoload is available")
 	if state != null:
 		_test_rewards(state)
+		_test_deselection(state)
+		await _test_pc_build_slots(state)
 		await _test_scene_flow(state)
 	print("\nPrototype tests: %d checks, %d failures." % [_checks, _failures])
 	quit(0 if _failures == 0 else 1)
@@ -44,6 +46,17 @@ func _test_catalog() -> void:
 	var first: PartData = Catalog.find_part("cpu_s4")
 	first.price = 1
 	_check(Catalog.find_part("cpu_s4").price == 12000, "Catalog resources are independent")
+	var first_board: PartData = Catalog.find_part("board_a")
+	first_board.supported_storage_interfaces.append("NVMe")
+	_check(Catalog.find_part("board_a").supported_storage_interfaces == PackedStringArray(["SATA"]),
+		"Editing a motherboard's storage interfaces cannot change the catalog")
+	var default_part := PartData.new()
+	_check(typeof(default_part.supported_storage_interfaces) == TYPE_PACKED_STRING_ARRAY,
+		"Default storage interfaces are a PackedStringArray")
+	_check(default_part.supported_storage_interfaces.duplicate().is_empty(),
+		"Default storage interfaces can be copied safely")
+	_check(Catalog.find_part("cpu_s4").supported_storage_interfaces.duplicate().is_empty(),
+		"Parts without storage specifications have a safely copied empty array")
 
 
 func _test_validation() -> void:
@@ -110,6 +123,11 @@ func _test_rewards(state: Node) -> void:
 	_check(state.coins == starting_coins + 5000 and state.xp == starting_xp + 100, "Success awards 5,000 coins and 100 XP")
 	_check(not state.claim_reward(), "The same build cannot pay twice")
 	_check(state.coins == starting_coins + 5000 and state.xp == starting_xp + 100, "A second claim leaves totals unchanged")
+	state.select_part("ssd", null)
+	_check(state.reward_claimed, "Deselecting after payment preserves the request's claimed reward")
+	state.select_part("ssd", Catalog.find_part("ssd_512"))
+	_check(state.evaluate_build()["success"], "A paid request can still evaluate an edited valid build")
+	_check(not state.claim_reward(), "Editing and rebuilding a paid request cannot pay again")
 
 	state.start_new_request()
 	_check(state.coins == starting_coins + 5000 and state.xp == starting_xp + 100, "Replaying preserves earned coins and XP")
@@ -135,7 +153,80 @@ func _test_rewards(state: Node) -> void:
 	_check(not state.claim_reward(), "Changing the budget invalidates a pending reward")
 	state.customer_budget = 60000
 	state.start_new_request()
+	_select_state_parts(state, _parts())
+	state.evaluate_build()
+	state.selected_parts["motherboard"].supported_storage_interfaces.append("NVMe")
+	_check(Validator.validate(state.selected_parts, state.customer_budget)["success"],
+		"Adding a storage interface leaves the evaluated parts compatible")
+	_check(not state.claim_reward(), "Changing a storage interface array cannot claim the previous result")
+	state.start_new_request()
+	_select_state_parts(state, _parts())
+	state.evaluate_build()
+	state.selected_parts["cpu"].price += 1
+	_check(Validator.validate(state.selected_parts, state.customer_budget)["success"],
+		"A one-coin price change still leaves the parts within budget")
+	_check(not state.claim_reward(), "Changing a price cannot claim the previous result even if the build remains valid")
+	state.start_new_request()
 	_check(state.coins == starting_coins + 5000 and state.xp == starting_xp + 100, "Rejected rewards leave player totals unchanged")
+
+
+func _test_deselection(state: Node) -> void:
+	state.start_new_request()
+	state.select_part("cpu", PartData.new("default_cpu", "cpu"))
+	_check(not state.evaluate_build()["success"],
+		"An incomplete build with default storage interfaces evaluates safely")
+	state.start_new_request()
+	_select_state_parts(state, _parts())
+	state.evaluate_build()
+	var before: Dictionary = _snapshot(state.selected_parts)
+	var notifications: Array[int] = [0]
+	var on_change := func() -> void:
+		notifications[0] += 1
+	state.state_changed.connect(on_change)
+	state.select_part("unknown", null)
+	state.select_part("unknown", Catalog.find_part("ssd_512"))
+	state.select_part("ssd", Catalog.find_part("ram_ddr4"))
+	_check(_snapshot(state.selected_parts) == before, "Invalid selection and deselection requests leave all slots unchanged")
+	_check(state.last_result.get("success", false), "Invalid selection requests preserve the evaluated result")
+	_check(notifications[0] == 0, "Invalid selection requests emit no state change")
+	state.select_part("ssd", null)
+	_check(not state.selected_parts.has("ssd"), "Deselecting removes the SSD slot")
+	_check(state.total_cost() == 33000, "Deselecting removes the SSD's price from the total")
+	_check(Validator.required_power(state.selected_parts) == 135, "Deselecting removes the SSD's power draw while retaining case overhead")
+	_check(not state.has_all_parts(), "Deselecting makes the build incomplete")
+	_check(state.last_result.is_empty(), "Deselecting invalidates the evaluated result")
+	_check(not state.claim_reward(), "A deselected build cannot claim a stale reward")
+	_check(notifications[0] == 1, "Deselecting an occupied slot emits one state change")
+	state.select_part("ssd", null)
+	_check(notifications[0] == 1, "Deselecting an empty slot is a silent no-op")
+	state.state_changed.disconnect(on_change)
+	state.start_new_request()
+
+
+func _test_pc_build_slots(state: Node) -> void:
+	var build_scene: PackedScene = load("res://scenes/screens/pc_build.tscn")
+	for has_cpu in [false, true]:
+		state.start_new_request()
+		if has_cpu:
+			state.select_part("cpu", Catalog.find_part("cpu_s4"))
+		var build: Node = build_scene.instantiate()
+		root.add_child(build)
+		await _advance_frames()
+		var title: Label = _find_label(build, "Selected components")
+		var separators: int = 0
+		if title != null:
+			for child in title.get_parent().get_children():
+				if child is HSeparator:
+					separators += 1
+		_check(title != null and separators == 4, "An %s build keeps four separators between its five component slots" % ["incomplete" if has_cpu else "empty"])
+		_check(_has_text(build, "SSD: no part selected"), "An incomplete build identifies the empty SSD slot")
+		_check(_has_text(build, "PSU: no part selected"), "An incomplete build identifies the empty PSU slot")
+		_check(_has_text(build, "Selected PSU: no part selected"), "An incomplete build's summary reports the absent PSU")
+		var build_button: Button = build.find_child("BuildButton", true, false) as Button
+		_check(build_button != null and build_button.disabled, "An incomplete build cannot press Build PC")
+		build.queue_free()
+		await _advance_frames()
+	state.start_new_request()
 
 
 func _test_scene_flow(state: Node) -> void:
@@ -164,12 +255,36 @@ func _test_scene_flow(state: Node) -> void:
 	_check(continue_button != null and continue_button.disabled, "An empty shop basket cannot continue to building")
 	if not await _choose_shop_parts(main, _parts()):
 		return
+	if not await _press_button(main, "ssd_256"):
+		return
+	_check(not state.selected_parts.has("ssd"), "Clicking the selected shop option deselects its component")
+	_check(continue_button.disabled, "Deselecting in the shop disables Continue")
+	var ssd_choice: Button = main.find_child("ssd_256", true, false) as Button
+	_check(ssd_choice != null and not ssd_choice.button_pressed, "The deselected shop option is visibly unpressed")
+	if not await _press_button(main, "ssd_256"):
+		return
+	_check(state.has_all_parts() and not continue_button.disabled, "Clicking the shop option again restores the complete basket")
 	if not await _press_button(main, "ContinueButton"):
 		return
 	var build_body: Control = main.find_child("PageBody", true, false) as Control
 	_check(build_body != null and build_body.size.y < 1000,
 		"The five selected parts fit in a readable build page under 1,000 pixels tall")
 	_check(_has_text(main, "StudyChip S4"), "The build screen shows the selected CPU")
+	_check(_has_text(main, "Selected PSU: StudyPower 180 W | Supplies up to 180 W"),
+		"The build summary identifies the selected PSU model and capacity")
+	var first_build_id: int = main.get("current_screen").get_instance_id()
+	if not await _press_button(main, "EditPartsButton"):
+		return
+	if not await _press_button(main, "ssd_512"):
+		return
+	if not await _press_button(main, "ContinueButton"):
+		return
+	_check(main.get("current_screen").get_instance_id() != first_build_id,
+		"Returning from the shop creates a fresh PC build screen")
+	_check(_has_text(main, "StudySSD 512 GB"), "The recreated build screen shows the replacement SSD")
+	_check(not _has_text(main, "StudySSD 256 GB"), "The recreated build screen does not show the previous SSD")
+	_check(_has_text(main, "Total cost: 41,000 / 60,000 coins"), "Returning from the shop refreshes the build cost")
+	_check(_has_text(main, "Estimated power needed: 140 W"), "Returning from the shop refreshes the build power")
 	if not await _press_button(main, "BuildButton"):
 		return
 	_check(_has_text(main, "SUCCESS"), "The result screen shows SUCCESS")
@@ -274,6 +389,16 @@ func _has_text(node: Node, text: String) -> bool:
 		if _has_text(child, text):
 			return true
 	return false
+
+
+func _find_label(node: Node, text: String) -> Label:
+	if node is Label and node.text == text:
+		return node
+	for child in node.get_children():
+		var label: Label = _find_label(child, text)
+		if label != null:
+			return label
+	return null
 
 
 func _advance_frames() -> void:

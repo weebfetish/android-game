@@ -7,7 +7,7 @@ A simple 2D educational PC-building simulator for Godot 4.x, written in GDScript
 1. Open Godot 4.x and import this folder's `project.godot`.
 2. Open the project and press **F5** (Run Project).
 3. Click **Start**, read Mika's request, and accept it.
-4. In the shop, select one CPU, motherboard, RAM kit, SSD, and PSU.
+4. In the shop, select one CPU, motherboard, RAM kit, SSD, and PSU. Click a selected option again to deselect it.
 5. Continue to the build screen, review your selection, and click **Build PC**.
 6. Read **SUCCESS** or **FAILURE** and the check explanations. Fix failed builds in the shop.
 7. After a successful build, continue to the reward screen to receive **5,000 coins and 100 XP**.

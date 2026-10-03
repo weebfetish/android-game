@@ -13,7 +13,7 @@ var _continue_button: Button
 func _ready() -> void:
 	var body := ScreenUI.create_page(
 		self, 2, "PARTS SHOP", "Pick one of each component.",
-		"Compare the price and specifications. Your selections stay selected while you edit the build."
+		"Choose one part per category. Click a selected part again to remove it."
 	)
 	var summary := ScreenUI.card(body, "Your basket")
 	_total_label = ScreenUI.label("", 22, ScreenUI.accent_color())
@@ -66,7 +66,11 @@ func _add_category(parent: Node, category: String) -> void:
 
 
 func _select_part(category: String, part: PartData) -> void:
-	GameState.select_part(category, part)
+	var selected: PartData = GameState.selected_parts.get(category)
+	if selected != null and selected.id == part.id:
+		GameState.select_part(category, null)
+	else:
+		GameState.select_part(category, part)
 	_refresh_summary()
 
 

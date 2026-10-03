@@ -30,9 +30,15 @@ func start_new_request() -> void:
 func select_part(category: String, part: PartData) -> void:
 	if not PartsCatalog.CATEGORIES.has(category):
 		return
-	if part == null or part.category != category:
+	if part != null and part.category != category:
 		return
-	selected_parts[category] = part
+	# Passing null clears a slot. Clearing an empty slot changes nothing.
+	if part == null:
+		if not selected_parts.erase(category):
+			return
+	else:
+		selected_parts[category] = part
+	# Both selecting and deselecting invalidate the previously checked build.
 	last_result.clear()
 	_evaluated_selection.clear()
 	state_changed.emit()

@@ -17,7 +17,9 @@ func _ready() -> void:
 	summary.add_child(ScreenUI.label("Estimated power needed: %d W" % BuildValidator.required_power(GameState.selected_parts), 20))
 	var psu: PartData = GameState.selected_parts.get("psu")
 	if psu != null:
-		summary.add_child(ScreenUI.label("Selected PSU: %s" % PartsCatalog.describe_part(psu), 18))
+		summary.add_child(ScreenUI.label("Selected PSU: %s | %s" % [psu.display_name, PartsCatalog.describe_part(psu)], 18))
+	else:
+		summary.add_child(ScreenUI.label("Selected PSU: no part selected", 18))
 	summary.add_child(ScreenUI.label("The provided case and cooling add a fixed 30 W and cost no coins.", 16, ScreenUI.muted_color()))
 	summary.add_child(ScreenUI.label("Build PC checks the CPU socket, RAM type, PSU capacity and total cost.", 16, ScreenUI.muted_color()))
 
@@ -39,17 +41,17 @@ func _add_part_row(parent: VBoxContainer, category: String) -> void:
 	var part: PartData = GameState.selected_parts.get(category)
 	if part == null:
 		parent.add_child(ScreenUI.label("%s: no part selected" % PartsCatalog.category_label(category), 18, Color("ffb1b1")))
-		return
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 16)
-	parent.add_child(row)
-	var name_label := ScreenUI.label("%s · %s" % [PartsCatalog.category_label(category), part.display_name], 18)
-	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.add_child(name_label)
-	var price_label := ScreenUI.label("%s coins" % ScreenUI.money(part.price), 18)
-	price_label.autowrap_mode = TextServer.AUTOWRAP_OFF
-	row.add_child(price_label)
-	parent.add_child(ScreenUI.label(PartsCatalog.describe_part(part), 16, ScreenUI.muted_color()))
+	else:
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 16)
+		parent.add_child(row)
+		var name_label := ScreenUI.label("%s · %s" % [PartsCatalog.category_label(category), part.display_name], 18)
+		name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(name_label)
+		var price_label := ScreenUI.label("%s coins" % ScreenUI.money(part.price), 18)
+		price_label.autowrap_mode = TextServer.AUTOWRAP_OFF
+		row.add_child(price_label)
+		parent.add_child(ScreenUI.label(PartsCatalog.describe_part(part), 16, ScreenUI.muted_color()))
 	if category != PartsCatalog.CATEGORIES[-1]:
 		parent.add_child(HSeparator.new())
 
