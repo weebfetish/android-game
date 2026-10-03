@@ -15,6 +15,7 @@ func _initialize() -> void:
 
 func _run() -> void:
 	root.size = Vector2i(1180, 780)
+	root.content_scale_size = root.size
 	await process_frame
 	_test_catalog()
 	_test_validation()
@@ -25,6 +26,7 @@ func _run() -> void:
 		_test_deselection(state)
 		await _test_pc_build_slots(state)
 		await _test_scene_flow(state)
+		await _test_responsive_pages(state)
 	print("\nPrototype tests: %d checks, %d failures." % [_checks, _failures])
 	quit(0 if _failures == 0 else 1)
 
@@ -322,6 +324,173 @@ func _test_scene_flow(state: Node) -> void:
 	_check(_has_text(main, "SUCCESS"), "Correcting RAM lets the customer build succeed")
 	main.queue_free()
 	await _advance_frames()
+
+
+func _test_responsive_pages(state: Node) -> void:
+	# Exercise the logical viewport at phone sizes, rather than scaling a PC page.
+	var previous_scale_size: Vector2i = root.content_scale_size
+	var main_scene: PackedScene = load("res://scenes/main.tscn")
+	for viewport_size in [Vector2i(360, 800), Vector2i(440, 900)]:
+		root.content_scale_size = viewport_size
+		root.size = viewport_size
+		var main: Node = main_scene.instantiate()
+		root.add_child(main)
+		await _advance_frames()
+		await _run_portrait_flow(main, state, viewport_size)
+		main.queue_free()
+		await _advance_frames()
+	root.size = Vector2i(1180, 780)
+	root.content_scale_size = previous_scale_size
+	await _advance_frames()
+
+
+func _run_portrait_flow(main: Node, state: Node, viewport_size: Vector2i) -> void:
+	var size_name: String = "%d x %d" % [viewport_size.x, viewport_size.y]
+	_check_page_layout(main, "%s menu" % size_name, ["StartButton", "QuitButton"])
+	_test_wallet_updates(main, state)
+	if not await _press_button(main, "StartButton"):
+		return
+	_check_page_layout(main, "%s request" % size_name, ["AcceptButton", "MenuButton"])
+	_check(_has_text(main, "60,000"), "The portrait request shows the customer budget")
+	if not await _press_button(main, "AcceptButton"):
+		return
+	_check_page_layout(main, "%s shop" % size_name, ["ContinueButton", "BackButton"])
+	_check(_choice_grids_have_columns(main, 1), "The %s shop puts part choices in one column" % size_name)
+	if not await _choose_shop_parts(main, _parts()):
+		return
+	_check(_selected_choices_have_badges(main, state), "Selected portrait shop cards have an explicit SELECTED badge")
+	if viewport_size.x == 360:
+		var shop_id: int = main.get("current_screen").get_instance_id()
+		var selection_before: Dictionary = _snapshot(state.selected_parts)
+		root.content_scale_size = Vector2i(1180, 780)
+		root.size = Vector2i(1180, 780)
+		await _advance_frames()
+		_check(_choice_grids_have_columns(main, 2), "Resizing the shop to desktop puts choices in two columns")
+		_check_page_layout(main, "resized desktop shop", ["ContinueButton", "BackButton"])
+		root.content_scale_size = viewport_size
+		root.size = viewport_size
+		await _advance_frames()
+		_check(_choice_grids_have_columns(main, 1), "Resizing the shop back to portrait restores one column")
+		_check(main.get("current_screen").get_instance_id() == shop_id and _snapshot(state.selected_parts) == selection_before,
+			"Responsive reflow preserves the same screen instance and all selected parts")
+		_check(_selected_choices_have_badges(main, state), "Selected badges remain correct after resizing")
+	var coins_before: int = state.coins
+	var xp_before: int = state.xp
+	if not await _press_button(main, "ContinueButton"):
+		return
+	_check_page_layout(main, "%s PC build" % size_name, ["BuildButton", "EditPartsButton"])
+	_check(_has_text(main, "38,000") and _has_text(main, "139 W"), "The portrait build shows the correct cost and power")
+	if not await _press_button(main, "BuildButton"):
+		return
+	_check_page_layout(main, "%s success result" % size_name, ["RewardButton"])
+	_check(_has_colored_label(main, "SUCCESS", ScreenUI.ACCENT), "A successful portrait result has a green SUCCESS status")
+	if not await _press_button(main, "RewardButton"):
+		return
+	_check_page_layout(main, "%s reward" % size_name, ["ReplayButton", "MenuButton"])
+	_check(state.coins == coins_before + 5000 and state.xp == xp_before + 100, "Completing the portrait flow pays the existing reward")
+	_check(_wallet_matches_state(main, state), "The portrait reward screen's wallet shows the updated coins and XP")
+	if not await _press_button(main, "ReplayButton"):
+		return
+	if not await _press_button(main, "AcceptButton"):
+		return
+	if not await _choose_shop_parts(main, _parts("cpu_s4", "board_a", "ram_ddr5")):
+		return
+	if not await _press_button(main, "ContinueButton"):
+		return
+	if not await _press_button(main, "BuildButton"):
+		return
+	_check_page_layout(main, "%s failure result" % size_name, ["EditPartsButton"])
+	_check(_has_colored_label(main, "FAILURE", ScreenUI.DANGER), "A failed portrait result has a red FAILURE status")
+	_check(_has_text(main, "RAM / motherboard") and main.find_child("RewardButton", true, false) == null,
+		"A portrait failure explains the RAM mismatch and offers no reward")
+	_check(state.coins == coins_before + 5000 and state.xp == xp_before + 100, "A failed portrait build leaves earned rewards unchanged")
+	if not await _press_button(main, "EditPartsButton"):
+		return
+	_check_page_layout(main, "%s return to shop" % size_name, ["ContinueButton", "BackButton"])
+	_check(_selected_choices_have_badges(main, state), "Returning from a failed portrait build preserves selected cards")
+
+
+func _check_page_layout(main: Node, page_name: String, button_names: Array[String]) -> void:
+	var scroll: ScrollContainer = main.find_child("PageScroll", true, false) as ScrollContainer
+	var body: Control = main.find_child("PageBody", true, false) as Control
+	_check(scroll != null and body != null and scroll.size.y >= 180 and scroll.horizontal_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED,
+		"%s has a usable vertical page viewport" % page_name)
+	var footer_fits: bool = scroll != null
+	var viewport_rect := Rect2(Vector2.ZERO, Vector2(root.size))
+	for button_name in button_names:
+		var action: Button = main.find_child(button_name, true, false) as Button
+		if action == null or action.size.y < 56 or not viewport_rect.encloses(action.get_global_rect()) or (scroll != null and scroll.is_ancestor_of(action)):
+			footer_fits = false
+			if action != null:
+				print("Footer bounds: %s %s in %s" % [button_name, action.get_global_rect(), viewport_rect])
+	_check(footer_fits, "%s keeps its large action buttons visible outside the scrolling content" % page_name)
+	_check(scroll != null and body != null and _content_fits_width(body, scroll.get_global_rect()),
+		"%s content fits the page width without horizontal overflow" % page_name)
+
+
+func _content_fits_width(node: Node, bounds: Rect2) -> bool:
+	if node is Control and node.is_visible_in_tree():
+		var rectangle: Rect2 = node.get_global_rect()
+		if rectangle.position.x < bounds.position.x - 1 or rectangle.end.x > bounds.end.x + 1:
+			print("Layout overflow: %s %s in %s" % [node.get_path(), rectangle, bounds])
+			return false
+	for child in node.get_children():
+		if not _content_fits_width(child, bounds):
+			return false
+	return true
+
+
+func _choice_grids_have_columns(main: Node, expected_columns: int) -> bool:
+	var grids: Array[Node] = main.find_children("*", "GridContainer", true, false)
+	if grids.size() != Catalog.CATEGORIES.size():
+		return false
+	for grid in grids:
+		if grid.columns != expected_columns:
+			return false
+	return true
+
+
+func _selected_choices_have_badges(main: Node, state: Node) -> bool:
+	for category in Catalog.CATEGORIES:
+		var part: PartData = state.selected_parts.get(category)
+		if part == null:
+			return false
+		var choice: Button = main.find_child(part.id, true, false) as Button
+		var selected_label: Label = _find_label(choice, "SELECTED") if choice != null else null
+		if choice == null or not choice.button_pressed or selected_label == null or not selected_label.is_visible_in_tree():
+			return false
+	return true
+
+
+func _test_wallet_updates(main: Node, state: Node) -> void:
+	_check(_wallet_matches_state(main, state), "The shared wallet displays current coins and XP")
+	var coins_before: int = state.coins
+	var xp_before: int = state.xp
+	state.coins += 1234
+	state.xp += 7
+	state.state_changed.emit()
+	_check(_wallet_matches_state(main, state), "The shared wallet refreshes on GameState.state_changed")
+	state.coins = coins_before
+	state.xp = xp_before
+	state.state_changed.emit()
+
+
+func _wallet_matches_state(main: Node, state: Node) -> bool:
+	var hud: Node = main.find_child("PlayerHUD", true, false)
+	if hud == null:
+		return false
+	var coins_value: Label = hud.find_child("CoinsValue", true, false) as Label
+	var xp_value: Label = hud.find_child("XPValue", true, false) as Label
+	return coins_value != null and xp_value != null and coins_value.text == ScreenUI.money(state.coins) and xp_value.text == ScreenUI.money(state.xp)
+
+
+func _has_colored_label(node: Node, text: String, color: Color) -> bool:
+	if node is Label and node.text == text and node.get_theme_color("font_color").is_equal_approx(color):
+		return true
+	for child in node.get_children():
+		if _has_colored_label(child, text, color):
+			return true
+	return false
 
 
 func _parts(

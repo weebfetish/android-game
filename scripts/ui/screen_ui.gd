@@ -1,13 +1,16 @@
 class_name ScreenUI
 extends RefCounted
-## Small shared helpers for placeholder UI. Gameplay stays in screen scripts.
+## Shared, lightweight layout helpers. All game rules remain in GameState.
 
 const DEFAULT_THEME: Theme = preload("res://theme/default_theme.tres")
-const BACKGROUND: Color = Color("0c111a")
-const TEXT: Color = Color("eef4fa")
-const MUTED: Color = Color("a3b4c7")
-const ACCENT: Color = Color("68dec5")
-const STEPS: PackedStringArray = ["Menu", "Request", "Shop", "Build", "Result", "Reward"]
+const BACKGROUND: Color = Color("101724")
+const TEXT: Color = Color("f1f5fb")
+const MUTED: Color = Color("a1afc6")
+const ACCENT: Color = Color("62e3b8")
+const BLUE: Color = Color("7fafff")
+const WARNING: Color = Color("ffd17c")
+const DANGER: Color = Color("ff8e9a")
+const COMPACT_WIDTH: float = 760.0
 
 
 static func create_page(
@@ -15,7 +18,6 @@ static func create_page(
 ) -> VBoxContainer:
 	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	root.theme = DEFAULT_THEME
-
 	var background := ColorRect.new()
 	background.color = BACKGROUND
 	background.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -24,56 +26,133 @@ static func create_page(
 
 	var margin := MarginContainer.new()
 	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	margin.add_theme_constant_override("margin_left", 36)
-	margin.add_theme_constant_override("margin_right", 36)
-	margin.add_theme_constant_override("margin_top", 24)
-	margin.add_theme_constant_override("margin_bottom", 24)
+	margin.add_theme_constant_override("margin_top", 16)
+	margin.add_theme_constant_override("margin_bottom", 16)
 	root.add_child(margin)
+	_update_margins(root, margin)
+	root.resized.connect(_update_margins.bind(root, margin))
 
 	var page := VBoxContainer.new()
-	page.add_theme_constant_override("separation", 14)
+	page.name = "PageLayout"
+	page.add_theme_constant_override("separation", 16)
 	margin.add_child(page)
-
-	var brand_row := HBoxContainer.new()
-	page.add_child(brand_row)
-	var brand := label("PC / BUILDER", 20, ACCENT)
+	var header := HBoxContainer.new()
+	header.add_theme_constant_override("separation", 12)
+	page.add_child(header)
+	var brand := VBoxContainer.new()
 	brand.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	brand_row.add_child(brand)
-	var edition := label("PROTOTYPE 01", 13, MUTED)
-	# A compact, non-wrapping label keeps the header at one line.
-	edition.autowrap_mode = TextServer.AUTOWRAP_OFF
-	brand_row.add_child(edition)
+	brand.add_theme_constant_override("separation", 2)
+	header.add_child(brand)
+	var brand_name := label("PC LAB", 22, TEXT)
+	brand_name.autowrap_mode = TextServer.AUTOWRAP_OFF
+	brand.add_child(brand_name)
+	var tagline := label("BUILD / LEARN", 11, ACCENT)
+	tagline.autowrap_mode = TextServer.AUTOWRAP_OFF
+	brand.add_child(tagline)
+	header.add_child(PlayerHUD.new())
 
 	var progress := HBoxContainer.new()
-	progress.add_theme_constant_override("separation", 12)
+	progress.add_theme_constant_override("separation", 8)
 	page.add_child(progress)
-	for index in range(STEPS.size()):
-		var text := "%02d  %s" % [index + 1, STEPS[index]]
-		var step_label := label(text, 14, ACCENT if index == step else MUTED)
-		step_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		progress.add_child(step_label)
+	for index in range(1, 6):
+		var bar := ColorRect.new()
+		bar.custom_minimum_size.y = 4
+		bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		bar.color = ACCENT if index <= step else Color("29374c")
+		bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		progress.add_child(bar)
 
-	page.add_child(HSeparator.new())
-	page.add_child(label(eyebrow.to_upper(), 13, ACCENT))
-	page.add_child(label(title, 32, TEXT))
-	if not subtitle.is_empty():
-		page.add_child(label(subtitle, 17, MUTED))
-
-	# Every page can scroll if the player uses a smaller window.
+	# Only content scrolls; currency and action buttons stay on screen.
 	var scroll := ScrollContainer.new()
 	scroll.name = "PageScroll"
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.follow_focus = true
 	page.add_child(scroll)
 	var body := VBoxContainer.new()
 	body.name = "PageBody"
 	body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	body.add_theme_constant_override("separation", 14)
+	body.add_theme_constant_override("separation", 16)
 	scroll.add_child(body)
+	body.set_meta("page_root", root)
+	body.set_meta("page_layout", page)
+	body.set_meta("page_scroll", scroll)
+
+	var heading := VBoxContainer.new()
+	heading.add_theme_constant_override("separation", 8)
+	body.add_child(heading)
+	var step_text := eyebrow.to_upper()
+	if step > 0:
+		step_text = "%s  /  %02d OF 05" % [step_text, step]
+	heading.add_child(label(step_text, 13, ACCENT))
+	var title_label := label(title, 32, TEXT)
+	heading.add_child(title_label)
+	_update_title(root, title_label)
+	root.resized.connect(_update_title.bind(root, title_label))
+	if not subtitle.is_empty():
+		heading.add_child(label(subtitle, 18, MUTED))
 	return body
 
 
-static func label(text: String, font_size: int = 18, color: Color = Color.WHITE) -> Label:
+static func is_compact(root: Control) -> bool:
+	return root.size.x < COMPACT_WIDTH
+
+
+static func _update_margins(root: Control, margin: MarginContainer) -> void:
+	var side: int = 18 if is_compact(root) else maxi(28, int((root.size.x - 1120) / 2))
+	margin.add_theme_constant_override("margin_left", side)
+	margin.add_theme_constant_override("margin_right", side)
+
+
+static func _update_title(root: Control, title_label: Label) -> void:
+	title_label.add_theme_font_size_override("font_size", 30 if is_compact(root) else 36)
+
+
+static func actions(body: VBoxContainer) -> BoxContainer:
+	var root: Control = body.get_meta("page_root")
+	var page: VBoxContainer = body.get_meta("page_layout")
+	var footer := PanelContainer.new()
+	footer.name = "ActionFooter"
+	footer.theme_type_variation = "FooterPanel"
+	page.add_child(footer)
+	var row := BoxContainer.new()
+	row.name = "PageActions"
+	row.add_theme_constant_override("separation", 10)
+	footer.add_child(row)
+	_update_actions(root, row)
+	root.resized.connect(_update_actions.bind(root, row))
+	return row
+
+
+static func _update_actions(root: Control, row: BoxContainer) -> void:
+	row.vertical = is_compact(root)
+
+
+static func sticky_card(body: VBoxContainer, title: String = "") -> VBoxContainer:
+	var page: VBoxContainer = body.get_meta("page_layout")
+	var scroll: ScrollContainer = body.get_meta("page_scroll")
+	var content := card(page, title)
+	page.move_child(content.get_parent(), scroll.get_index())
+	return content
+
+
+static func responsive_grid(root: Control, parent: Node) -> GridContainer:
+	var grid := GridContainer.new()
+	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	grid.add_theme_constant_override("h_separation", 12)
+	grid.add_theme_constant_override("v_separation", 12)
+	parent.add_child(grid)
+	_update_grid(root, grid)
+	# Each grid needs its own callback when a page has several categories.
+	root.resized.connect(func() -> void: _update_grid(root, grid))
+	return grid
+
+
+static func _update_grid(root: Control, grid: GridContainer) -> void:
+	grid.columns = 1 if is_compact(root) else 2
+
+
+static func label(text: String, font_size: int = 20, color: Color = TEXT) -> Label:
 	var result := Label.new()
 	result.text = text
 	result.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -84,19 +163,47 @@ static func label(text: String, font_size: int = 18, color: Color = Color.WHITE)
 
 static func card(parent: Node, title: String) -> VBoxContainer:
 	var panel := PanelContainer.new()
+	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	parent.add_child(panel)
 	var content := VBoxContainer.new()
-	content.add_theme_constant_override("separation", 10)
+	content.add_theme_constant_override("separation", 12)
 	panel.add_child(content)
 	if not title.is_empty():
-		content.add_child(label(title, 19, TEXT))
+		content.add_child(label(title, 21, TEXT))
 	return content
+
+
+static func section(parent: Node, title: String, kicker: String = "") -> VBoxContainer:
+	var content := card(parent, title)
+	if not kicker.is_empty():
+		content.add_child(label(kicker, 16, MUTED))
+	return content
+
+
+static func badge(text: String, color: Color = ACCENT) -> PanelContainer:
+	var panel := PanelContainer.new()
+	panel.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(color.r, color.g, color.b, 0.12)
+	style.set_corner_radius_all(8)
+	style.content_margin_left = 10
+	style.content_margin_right = 10
+	style.content_margin_top = 6
+	style.content_margin_bottom = 6
+	panel.add_theme_stylebox_override("panel", style)
+	var text_label := label(text, 13, color)
+	text_label.autowrap_mode = TextServer.AUTOWRAP_OFF
+	text_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	panel.add_child(text_label)
+	return panel
 
 
 static func button(text: String, primary: bool = false) -> Button:
 	var result := Button.new()
 	result.text = text
-	result.custom_minimum_size.y = 46
+	result.custom_minimum_size.y = 60
+	result.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	result.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	if primary:
 		result.theme_type_variation = "PrimaryButton"
@@ -104,7 +211,6 @@ static func button(text: String, primary: bool = false) -> Button:
 
 
 static func money(amount: int) -> String:
-	# Group digits without a plugin or locale dependency.
 	var digits := str(absi(amount))
 	var formatted := ""
 	for index in range(digits.length()):

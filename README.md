@@ -6,13 +6,15 @@ A simple 2D educational PC-building simulator for Godot 4.x, written in GDScript
 
 1. Open Godot 4.x and import this folder's `project.godot`.
 2. Open the project and press **F5** (Run Project).
-3. Click **Start**, read Mika's request, and accept it.
+3. Click **Start building**, read Mika's request, and accept it.
 4. In the shop, select one CPU, motherboard, RAM kit, SSD, and PSU. Click a selected option again to deselect it.
 5. Continue to the build screen, review your selection, and click **Build PC**.
 6. Read **SUCCESS** or **FAILURE** and the check explanations. Fix failed builds in the shop.
 7. After a successful build, continue to the reward screen to receive **5,000 coins and 100 XP**.
 
-Use the mouse wheel or scrollbar to reach the remaining parts and buttons on longer screens.
+Use the mouse wheel or scrollbar to read longer screens. The action buttons stay visible in a footer while the page scrolls.
+
+The UI adapts to desktop and portrait windows, including **360 × 800** and **440 × 900**. Part choices appear in two columns on desktop and one column on a phone-sized window. Selected cards show a **SELECTED** badge. Coins and XP stay visible in the shared header, and the shop basket stays visible while browsing parts. Resizing keeps the current screen and selections.
 
 Use **F5** for the complete flow. **F6** runs only the currently open scene, so an individual screen may not have the navigation or selections provided by the main scene.
 
@@ -43,7 +45,8 @@ A working first build is **StudyChip S4 + StudyBoard A + StudyRAM 8 GB + StudySS
 - `scenes/screens/` contains the six screens: main menu, customer request, parts shop, PC build, result, and reward.
 - `scripts/screens/` builds each screen's placeholder UI and handles its buttons.
 - `scripts/main.gd` swaps screens when they request navigation.
-- `scripts/ui/screen_ui.gd` and `theme/default_theme.tres` share the layout helpers and simple styling.
+- `scripts/ui/screen_ui.gd`, `scripts/ui/part_choice_card.gd`, and `theme/default_theme.tres` share the responsive layout, part cards, and styling.
+- `scripts/ui/player_hud.gd` shows current coins and XP and updates when the game state changes.
 - `scripts/data/part_data.gd` defines the fields on a part.
 - `scripts/data/parts_catalog.gd` defines the ten shop options. Edit this file to change names, prices, or specifications.
 - `scripts/build_validator.gd` checks a selected build and returns explanations without changing it.
@@ -66,4 +69,4 @@ For PowerShell with a Godot executable outside `PATH`:
 & 'C:\path\to\Godot_v4.x-stable_win64_console.exe' --headless --path . --script res://tests/run_tests.gd
 ```
 
-The suite exits with code `0` when all checks pass and code `1` if a check fails. It covers compatible and incompatible builds, missing or misplaced parts, budget and PSU boundaries, reward safeguards, and navigation through success and failure screens.
+The suite exits with code `0` when all checks pass and code `1` if a check fails. It covers compatible and incompatible builds, missing or misplaced parts, budget and PSU boundaries, reward safeguards, and navigation through success and failure screens. UI checks also cover both portrait sizes, visible footer buttons, horizontal overflow, selection badges, wallet updates, and resizing the shop without losing selections.
