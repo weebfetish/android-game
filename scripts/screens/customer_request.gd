@@ -2,19 +2,46 @@ extends Control
 
 signal navigate(screen_name: String)
 
+var _portrait_frame: Control
+
 
 func _ready() -> void:
 	var body := ScreenUI.create_page(
 		self, 1, "CUSTOMER REQUEST", "A desktop for studying",
 		"Help Mika get a reliable first PC."
 	)
-	var request := ScreenUI.card(body, GameState.customer_name)
-	request.add_child(ScreenUI.badge("STUDENT", ScreenUI.BLUE))
+	var request := ScreenUI.card(body, "")
+	var identity := HBoxContainer.new()
+	identity.name = "CustomerIdentityRow"
+	identity.add_theme_constant_override("separation", 16)
+	request.add_child(identity)
+	# A fixed frame keeps the large portrait from determining the page width.
+	_portrait_frame = Control.new()
+	_portrait_frame.name = "PortraitFrame"
+	_portrait_frame.clip_contents = true
+	_portrait_frame.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	identity.add_child(_portrait_frame)
+	var portrait := ArtAssets.texture_rect(ArtAssets.MIKA, Vector2.ZERO)
+	portrait.name = "MikaPortrait"
+	_portrait_frame.add_child(portrait)
+	portrait.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_resize_portrait()
+	resized.connect(_resize_portrait)
+
+	var details := VBoxContainer.new()
+	details.name = "CustomerDetails"
+	details.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	details.add_theme_constant_override("separation", 8)
+	identity.add_child(details)
+	details.add_child(ScreenUI.label(GameState.customer_name, 28))
+	details.add_child(ScreenUI.badge("STUDENT", ScreenUI.BLUE))
+	details.add_child(ScreenUI.label("Budget", 18, ScreenUI.MUTED))
+	details.add_child(ScreenUI.label("%s coins" % ScreenUI.money(GameState.customer_budget), 24, ScreenUI.ACCENT))
 	request.add_child(ScreenUI.label(GameState.customer_request, 20))
-	request.add_child(ScreenUI.label("Budget", 18, ScreenUI.MUTED))
-	request.add_child(ScreenUI.label("%s coins" % ScreenUI.money(GameState.customer_budget), 32, ScreenUI.ACCENT))
 	request.add_child(ScreenUI.label("Reward on success", 18, ScreenUI.MUTED))
 	request.add_child(ScreenUI.label("+%s coins  ·  +%s XP" % [ScreenUI.money(GameState.reward_coins), ScreenUI.money(GameState.reward_xp)], 20, ScreenUI.WARNING))
+	UiMotion.fade_in(request.get_parent() as Control)
+	UiMotion.fade_slide(portrait)
 
 	var requirements := ScreenUI.card(body, "Your build checklist")
 	requirements.add_child(ScreenUI.label("CPU socket and RAM type match the motherboard.", 20))
@@ -32,6 +59,10 @@ func _ready() -> void:
 	menu_button.name = "MenuButton"
 	menu_button.pressed.connect(_open_menu)
 	actions.add_child(menu_button)
+
+
+func _resize_portrait() -> void:
+	_portrait_frame.custom_minimum_size = Vector2(96, 128) if ScreenUI.is_compact(self) else Vector2(120, 160)
 
 
 func _open_shop() -> void:

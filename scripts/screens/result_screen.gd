@@ -58,6 +58,7 @@ func _add_status_banner(parent: Node, result: Dictionary, success: bool) -> void
 	style.content_margin_top = 16
 	style.content_margin_bottom = 16
 	var banner_panel: PanelContainer = banner.get_parent()
+	banner_panel.name = "ResultBanner"
 	banner_panel.add_theme_stylebox_override("panel", style)
 	banner.add_child(ScreenUI.badge("BUILD VERIFIED" if success else "BUILD NEEDS CHANGES", status_color))
 	banner.add_child(ScreenUI.label("SUCCESS" if success else "FAILURE", 32, status_color))
@@ -68,6 +69,8 @@ func _add_status_banner(parent: Node, result: Dictionary, success: bool) -> void
 		var issue_count: int = result.get("reasons", PackedStringArray()).size()
 		banner.add_child(ScreenUI.label("%d %s to fix." % [issue_count, "issue" if issue_count == 1 else "issues"], 24))
 		banner.add_child(ScreenUI.label("Change the highlighted parts, then check your PC again.", 20))
+	# A short fade marks the report without moving layout or delaying its buttons.
+	UiMotion.fade_in(banner_panel)
 
 
 func _add_checks(parent: Node, checks: Array) -> void:

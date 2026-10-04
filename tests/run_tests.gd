@@ -4,6 +4,15 @@ extends SceneTree
 
 const Catalog = preload("res://scripts/data/parts_catalog.gd")
 const Validator = preload("res://scripts/build_validator.gd")
+const ART_PATHS: Dictionary = {
+	"cpu": "res://assets/icons/cpu.png",
+	"motherboard": "res://assets/icons/motherboard.png",
+	"ram": "res://assets/icons/ram.png",
+	"ssd": "res://assets/icons/ssd.png",
+	"psu": "res://assets/icons/psu.png",
+	"mika": "res://assets/characters/mika.png",
+	"workshop": "res://assets/backgrounds/workshop_room.png",
+}
 
 var _checks: int = 0
 var _failures: int = 0
@@ -19,6 +28,7 @@ func _run() -> void:
 	await process_frame
 	_test_catalog()
 	_test_validation()
+	_test_art_assets()
 	var state: Node = root.get_node_or_null("GameState")
 	_check(state != null, "GameState autoload is available")
 	if state != null:
@@ -27,6 +37,7 @@ func _run() -> void:
 		await _test_pc_build_slots(state)
 		await _test_scene_flow(state)
 		await _test_responsive_pages(state)
+		await _test_art_pages(state)
 	print("\nPrototype tests: %d checks, %d failures." % [_checks, _failures])
 	quit(0 if _failures == 0 else 1)
 
@@ -408,6 +419,169 @@ func _run_portrait_flow(main: Node, state: Node, viewport_size: Vector2i) -> voi
 		return
 	_check_page_layout(main, "%s return to shop" % size_name, ["ContinueButton", "BackButton"])
 	_check(_selected_choices_have_badges(main, state), "Returning from a failed portrait build preserves selected cards")
+
+
+func _test_art_assets() -> void:
+	for key in ART_PATHS:
+		var path: String = ART_PATHS[key]
+		_check(ResourceLoader.exists(path), "%s art exists at its normalized PNG path" % key)
+		var texture: Texture2D = load(path) as Texture2D
+		_check(texture != null, "%s art imports as a Texture2D" % key)
+		if texture == null:
+			continue
+		var cached: Texture2D
+		var limit: int = 256
+		if key == "mika":
+			cached = ArtAssets.MIKA
+			limit = 512
+		elif key == "workshop":
+			cached = ArtAssets.WORKSHOP
+			limit = 1280
+		else:
+			cached = ArtAssets.component_icon(key)
+		_check(cached == texture, "%s art uses the shared cached texture" % key)
+		_check(texture.get_width() > 0 and texture.get_height() > 0 and texture.get_width() <= limit and texture.get_height() <= limit,
+			"%s imported texture stays within its %d-pixel limit" % [key, limit])
+		# Compare with the source PNG without loading it as a runtime resource.
+		var source := Image.new()
+		var source_error: Error = source.load_png_from_buffer(FileAccess.get_file_as_bytes(path))
+		var imported_aspect: float = float(texture.get_width()) / texture.get_height()
+		var source_aspect: float = float(source.get_width()) / maxi(1, source.get_height())
+		_check(source_error == OK and not source.is_empty() and absf(imported_aspect - source_aspect) < 0.01,
+			"%s texture import preserves the source aspect ratio" % key)
+
+
+func _test_art_pages(state: Node) -> void:
+	# Keep the original fast button flow unchanged. These extra checks wait only
+	# when they inspect the final appearance of a short entry animation.
+	var previous_size: Vector2i = root.size
+	var previous_scale_size: Vector2i = root.content_scale_size
+	for viewport_size in [Vector2i(1180, 780), Vector2i(360, 800), Vector2i(440, 900)]:
+		root.content_scale_size = viewport_size
+		root.size = viewport_size
+		state.start_new_request()
+		var menu: Control = load("res://scenes/screens/main_menu.tscn").instantiate()
+		root.add_child(menu)
+		await _advance_frames()
+		_check_workshop_background(menu)
+		menu.queue_free()
+		await _advance_frames()
+
+		var request: Control = load("res://scenes/screens/customer_request.tscn").instantiate()
+		root.add_child(request)
+		await _advance_frames()
+		await create_timer(0.3).timeout
+		_check_workshop_background(request)
+		_check_customer_portrait(request, state)
+		request.queue_free()
+		await _advance_frames()
+
+		_select_state_parts(state, _parts())
+		var shop: Control = load("res://scenes/screens/parts_shop.tscn").instantiate()
+		root.add_child(shop)
+		await _advance_frames()
+		_check_part_icons(shop)
+		await _test_selection_motion(shop, state)
+		shop.queue_free()
+		await _advance_frames()
+
+		for success in [true, false]:
+			state.start_new_request()
+			_select_state_parts(state, _parts() if success else _parts("cpu_s4", "board_a", "ram_ddr5"))
+			state.evaluate_build()
+			var result: Control = load("res://scenes/screens/result_screen.tscn").instantiate()
+			root.add_child(result)
+			await _advance_frames()
+			await _check_result_motion(result, success)
+			result.queue_free()
+			await _advance_frames()
+	state.start_new_request()
+	root.size = previous_size
+	root.content_scale_size = previous_scale_size
+	await _advance_frames()
+
+
+func _check_workshop_background(page: Control) -> void:
+	var background: TextureRect = page.find_child("WorkshopBackground", true, false) as TextureRect
+	var overlay: ColorRect = page.find_child("WorkshopOverlay", true, false) as ColorRect
+	_check(background != null and background.texture == ArtAssets.WORKSHOP and background.expand_mode == TextureRect.EXPAND_IGNORE_SIZE and background.stretch_mode == TextureRect.STRETCH_KEEP_ASPECT_COVERED,
+		"The workshop background fills the page while preserving its aspect ratio")
+	_check(background != null and overlay != null and background.mouse_filter == Control.MOUSE_FILTER_IGNORE and overlay.mouse_filter == Control.MOUSE_FILTER_IGNORE,
+		"The workshop art and dark overlay leave UI input available")
+	_check(overlay != null and overlay.color.a >= 0.65 and overlay.color.a <= 0.9 and overlay.get_global_rect().encloses(Rect2(Vector2.ZERO, Vector2(root.size))),
+		"A full-page dark overlay keeps workshop text readable")
+
+
+func _check_customer_portrait(page: Control, state: Node) -> void:
+	var portrait: TextureRect = page.find_child("MikaPortrait", true, false) as TextureRect
+	var frame: Control = page.find_child("PortraitFrame", true, false) as Control
+	var details: Control = page.find_child("CustomerDetails", true, false) as Control
+	var request_text: Label = _find_label(page, state.customer_request)
+	_check(portrait != null and portrait.texture == ArtAssets.MIKA and portrait.stretch_mode == TextureRect.STRETCH_KEEP_ASPECT_CENTERED and portrait.expand_mode == TextureRect.EXPAND_IGNORE_SIZE and portrait.mouse_filter == Control.MOUSE_FILTER_IGNORE,
+		"Mika's portrait uses the cached art without stretching or taking input")
+	_check(frame != null and portrait != null and frame.get_global_rect().encloses(portrait.get_global_rect()) and portrait.modulate.a >= 0.99,
+		"Mika's short entrance settles inside the portrait frame")
+	_check(frame != null and details != null and not frame.get_global_rect().intersects(details.get_global_rect()) and request_text != null and request_text.get_global_rect().position.y >= frame.get_global_rect().end.y - 1,
+		"The portrait does not overlap Mika's details or customer request")
+	var scroll: ScrollContainer = page.find_child("PageScroll", true, false) as ScrollContainer
+	var body: Control = page.find_child("PageBody", true, false) as Control
+	_check(scroll != null and body != null and _content_fits_width(body, scroll.get_global_rect()),
+		"The illustrated customer request fits the current page width")
+
+
+func _check_part_icons(shop: Control) -> void:
+	var correct_textures: bool = true
+	var safe_display: bool = true
+	for category in Catalog.CATEGORIES:
+		var expected: Texture2D = ArtAssets.component_icon(category)
+		for part in Catalog.get_parts(category):
+			var choice: Button = shop.find_child(part.id, true, false) as Button
+			var icon: TextureRect = choice.find_child("PartIcon", true, false) as TextureRect if choice != null else null
+			if icon == null:
+				correct_textures = false
+				safe_display = false
+				continue
+			correct_textures = correct_textures and icon.texture == expected
+			safe_display = safe_display and icon.stretch_mode == TextureRect.STRETCH_KEEP_ASPECT_CENTERED and icon.expand_mode == TextureRect.EXPAND_IGNORE_SIZE and icon.mouse_filter == Control.MOUSE_FILTER_IGNORE and icon.size.x <= 64 and icon.size.y <= 64
+	_check(correct_textures, "All ten part cards use the correct shared category icon texture")
+	_check(safe_display, "Part icons stay small, preserve aspect ratio, and leave button input available")
+
+
+func _test_selection_motion(shop: Control, state: Node) -> void:
+	var first: Button = shop.find_child("cpu_s4", true, false) as Button
+	var other: Button = shop.find_child("cpu_p6", true, false) as Button
+	_check(first != null and other != null, "Both CPU cards are available for rapid selection")
+	if first == null or other == null:
+		return
+	var first_bounds: Rect2 = first.get_global_rect()
+	var other_bounds: Rect2 = other.get_global_rect()
+	# Each signal is handled immediately, even if the previous pop is active.
+	for choice in [first, first, other, first, first, first]:
+		choice.pressed.emit()
+	var selected: PartData = state.selected_parts.get("cpu")
+	_check(selected != null and selected.id == "cpu_s4" and first.button_pressed and not other.button_pressed,
+		"Rapid selection and deselection leaves the last requested CPU selected")
+	await create_timer(0.25).timeout
+	var icons_settled: bool = true
+	for icon in shop.find_children("PartIcon", "TextureRect", true, false):
+		icons_settled = icons_settled and icon.scale.is_equal_approx(Vector2.ONE)
+	_check(icons_settled and _selected_choices_have_badges(shop, state),
+		"Selection pops settle at normal scale with the correct selected badges")
+	_check(first.get_global_rect().is_equal_approx(first_bounds) and other.get_global_rect().is_equal_approx(other_bounds),
+		"Selection animations keep both CPU button bounds unchanged")
+
+
+func _check_result_motion(page: Control, success: bool) -> void:
+	var banner: Control = page.find_child("ResultBanner", true, false) as Control
+	var action: Button = page.find_child("RewardButton" if success else "EditPartsButton", true, false) as Button
+	_check(banner != null and action != null and not action.disabled,
+		"The %s report has an enabled action during its entrance" % ["success" if success else "failure"])
+	if banner == null:
+		return
+	var before: Rect2 = banner.get_global_rect()
+	await create_timer(0.25).timeout
+	_check(banner.modulate.a >= 0.99 and banner.get_global_rect().is_equal_approx(before),
+		"The %s report fades in without moving its banner" % ["success" if success else "failure"])
 
 
 func _check_page_layout(main: Node, page_name: String, button_names: Array[String]) -> void:

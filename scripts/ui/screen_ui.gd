@@ -23,6 +23,8 @@ static func create_page(
 	background.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	background.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	root.add_child(background)
+	if step == 0 or step == 1:
+		_add_workshop_background(root)
 
 	var margin := MarginContainer.new()
 	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -92,6 +94,20 @@ static func create_page(
 	if not subtitle.is_empty():
 		heading.add_child(label(subtitle, 18, MUTED))
 	return body
+
+
+static func _add_workshop_background(root: Control) -> void:
+	var image := ArtAssets.texture_rect(ArtAssets.WORKSHOP, Vector2.ZERO)
+	image.name = "WorkshopBackground"
+	image.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	image.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	root.add_child(image)
+	var overlay := ColorRect.new()
+	overlay.name = "WorkshopOverlay"
+	overlay.color = Color(BACKGROUND, 0.80)
+	overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	root.add_child(overlay)
 
 
 static func is_compact(root: Control) -> bool:

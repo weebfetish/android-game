@@ -5,6 +5,10 @@ extends Button
 var _content: VBoxContainer
 var _selection_text: Label
 var _selection_badge: PanelContainer
+var _icon: TextureRect
+var _selection_tween: Tween
+var _last_selected: bool = false
+var _has_selection_state: bool = false
 
 
 func _init(part: PartData) -> void:
@@ -34,10 +38,18 @@ func _init(part: PartData) -> void:
 	var heading := HBoxContainer.new()
 	heading.add_theme_constant_override("separation", 12)
 	_content.add_child(heading)
-	var tile := ScreenUI.badge(_component_code(part.category), ScreenUI.BLUE)
-	tile.custom_minimum_size = Vector2(48, 48)
-	tile.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
-	heading.add_child(tile)
+	var icon_frame := PanelContainer.new()
+	icon_frame.name = "PartIconFrame"
+	icon_frame.custom_minimum_size = Vector2(64, 64)
+	icon_frame.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	var icon_style := _card_style(Color(ScreenUI.BLUE, 0.08), Color(ScreenUI.BLUE, 0.25))
+	for side in ["left", "top", "right", "bottom"]:
+		icon_style.set("content_margin_" + side, 6)
+	icon_frame.add_theme_stylebox_override("panel", icon_style)
+	heading.add_child(icon_frame)
+	_icon = ArtAssets.texture_rect(ArtAssets.component_icon(part.category), Vector2(52, 52))
+	_icon.name = "PartIcon"
+	icon_frame.add_child(_icon)
 	var name_and_price := VBoxContainer.new()
 	name_and_price.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	name_and_price.add_theme_constant_override("separation", 4)
@@ -73,6 +85,25 @@ func set_selected(selected: bool) -> void:
 func _update_selection_badge(selected: bool) -> void:
 	_selection_text.text = "SELECTED" if selected else "TAP TO SELECT"
 	_selection_text.add_theme_color_override("font_color", ScreenUI.ACCENT if selected else ScreenUI.MUTED)
+	# The first update restores saved selections without playing an animation.
+	if not _has_selection_state:
+		_has_selection_state = true
+		_last_selected = selected
+		return
+	if selected == _last_selected:
+		return
+	_last_selected = selected
+	_reset_selection_pop()
+	if selected and is_inside_tree():
+		_icon.pivot_offset = _icon.size * 0.5
+		_selection_tween = UiMotion.pop(_icon)
+
+
+func _reset_selection_pop() -> void:
+	if _selection_tween != null and _selection_tween.is_valid():
+		_selection_tween.kill()
+	_selection_tween = null
+	_icon.scale = Vector2.ONE
 
 
 func _ignore_mouse_on_children(parent: Node) -> void:
@@ -80,10 +111,6 @@ func _ignore_mouse_on_children(parent: Node) -> void:
 		if child is Control:
 			child.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		_ignore_mouse_on_children(child)
-
-
-func _component_code(category: String) -> String:
-	return "MB" if category == "motherboard" else category.to_upper()
 
 
 func _card_style(fill: Color, border: Color, border_width: int = 1) -> StyleBoxFlat:

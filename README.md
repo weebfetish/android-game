@@ -1,6 +1,6 @@
 # PC Builder prototype
 
-A simple 2D educational PC-building simulator for Godot 4.x, written in GDScript. The project uses placeholder panels, text, and buttons. No external assets, plugins, or services are required.
+A simple 2D educational PC-building simulator for Godot 4.x, written in GDScript. The responsive UI uses the supplied workshop background, Mika portrait, and component icons alongside simple panels, text, and buttons. No plugins or external services are required.
 
 ## Run the game
 
@@ -43,15 +43,29 @@ A working first build is **StudyChip S4 + StudyBoard A + StudyRAM 8 GB + StudySS
 
 - `scenes/main.tscn` starts the game and hosts the current screen.
 - `scenes/screens/` contains the six screens: main menu, customer request, parts shop, PC build, result, and reward.
-- `scripts/screens/` builds each screen's placeholder UI and handles its buttons.
+- `scripts/screens/` builds each screen's UI and handles its buttons.
 - `scripts/main.gd` swaps screens when they request navigation.
 - `scripts/ui/screen_ui.gd`, `scripts/ui/part_choice_card.gd`, and `theme/default_theme.tres` share the responsive layout, part cards, and styling.
 - `scripts/ui/player_hud.gd` shows current coins and XP and updates when the game state changes.
+- `scripts/ui/art_assets.gd` shares cached textures and creates image controls that preserve aspect ratio.
+- `scripts/ui/ui_motion.gd` contains the short entrance fades, portrait slide, and selection pop.
 - `scripts/data/part_data.gd` defines the fields on a part.
 - `scripts/data/parts_catalog.gd` defines the ten shop options. Edit this file to change names, prices, or specifications.
 - `scripts/build_validator.gd` checks a selected build and returns explanations without changing it.
 - `scripts/game_state.gd` is the `GameState` autoload. It holds the customer, selections, result, coins, and XP, and prevents duplicate or stale reward claims.
 - `tests/run_tests.gd` checks the rules, reward handling, and complete button flow.
+
+## Art and UI motion
+
+The supplied images use these normalized paths:
+
+- `assets/backgrounds/workshop_room.png` appears behind the menu and customer request, with a dark overlay for readable text.
+- `assets/characters/mika.png` appears beside Mika's customer details.
+- `assets/icons/cpu.png`, `motherboard.png`, `ram.png`, `ssd.png`, and `psu.png` provide the shop's category icons. Both choices in a category reuse the same cached texture.
+
+Godot limits imported icons to **256 pixels**, the portrait to **512 pixels**, and the background to **1,280 pixels** on the longest side. Source files remain in `assets/`; the bounded imported textures keep these decorations lightweight. Image controls preserve aspect ratio, and decorative art leaves mouse input available to the buttons.
+
+Short, one-shot animations mark screen entrances and selections: cards fade in, Mika's portrait slides a few pixels, selected part icons pop briefly, and the result banner fades in. They settle within a fraction of a second. Buttons stay usable during the animation, and component-card bounds stay fixed. These effects do not change build checks, selection rules, or rewards.
 
 ## Headless checks
 
@@ -69,4 +83,4 @@ For PowerShell with a Godot executable outside `PATH`:
 & 'C:\path\to\Godot_v4.x-stable_win64_console.exe' --headless --path . --script res://tests/run_tests.gd
 ```
 
-The suite exits with code `0` when all checks pass and code `1` if a check fails. It covers compatible and incompatible builds, missing or misplaced parts, budget and PSU boundaries, reward safeguards, and navigation through success and failure screens. UI checks also cover both portrait sizes, visible footer buttons, horizontal overflow, selection badges, wallet updates, and resizing the shop without losing selections.
+The suite exits with code `0` when all checks pass and code `1` if a check fails. It covers compatible and incompatible builds, missing or misplaced parts, budget and PSU boundaries, reward safeguards, and navigation through success and failure screens. UI checks also cover both portrait sizes, visible footer buttons, horizontal overflow, selection badges, wallet updates, and resizing the shop without losing selections. Art checks cover asset imports, texture reuse, aspect ratio, portrait layout, decorative input handling, and animation settling after rapid selection changes.
