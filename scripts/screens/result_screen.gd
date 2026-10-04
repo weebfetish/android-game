@@ -28,6 +28,8 @@ func _ready() -> void:
 		if success:
 			var reward_preview := ScreenUI.card(body, "Your reward is ready")
 			reward_preview.add_child(ScreenUI.label("+%s coins  +%s XP" % [ScreenUI.money(GameState.reward_coins), ScreenUI.money(GameState.reward_xp)], 24, ScreenUI.accent_color()))
+			var gems: int = 0 if GameState.completed_jobs.has(GameState.current_job_id) else GameState.reward_gems
+			reward_preview.add_child(ScreenUI.label("+%d %s" % [gems, "gem" if gems == 1 else "gems"], 20, ScreenUI.WARNING))
 			reward_preview.add_child(ScreenUI.label("Continue to collect your job reward.", 20, ScreenUI.muted_color()))
 		else:
 			body.add_child(ScreenUI.label("No coins or XP are awarded for a failed build.", 18, ScreenUI.muted_color()))
@@ -64,7 +66,8 @@ func _add_status_banner(parent: Node, result: Dictionary, success: bool) -> void
 	banner.add_child(ScreenUI.label("SUCCESS" if success else "FAILURE", 32, status_color))
 	if success:
 		banner.add_child(ScreenUI.label("All checks passed.", 24))
-		banner.add_child(ScreenUI.label("%s's study PC is compatible and within budget." % GameState.customer_name, 20))
+		var job: JobData = GameState.get_current_job()
+		banner.add_child(ScreenUI.label("%s's %s meets the request and stays within budget." % [job.name, job.use_case.to_lower().replace(" pc", " PC")], 20))
 	else:
 		var issue_count: int = result.get("reasons", PackedStringArray()).size()
 		banner.add_child(ScreenUI.label("%d %s to fix." % [issue_count, "issue" if issue_count == 1 else "issues"], 24))

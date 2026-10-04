@@ -6,6 +6,8 @@ extends Resource
 @export var category: String = ""
 @export var display_name: String = ""
 @export var price: int = 0
+@export var cpu_score: int = 1
+@export var unlock_level: int = 1
 @export var socket: String = ""
 @export var ram_type: String = ""
 @export var power_draw: int = 0
@@ -26,6 +28,8 @@ func _init(
 	category = part_category
 	display_name = part_name
 	price = part_price
+	cpu_score = int(specifications.get("cpu_score", 1))
+	unlock_level = int(specifications.get("unlock_level", 1))
 	socket = String(specifications.get("socket", ""))
 	ram_type = String(specifications.get("ram_type", ""))
 	power_draw = int(specifications.get("power_draw", 0))

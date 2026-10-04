@@ -5,6 +5,7 @@ signal navigate(screen_name: String)
 const ChoiceCard = preload("res://scripts/ui/part_choice_card.gd")
 
 var _option_buttons: Dictionary = {}
+var _lock_labels: Dictionary = {}
 var _total_label: Label
 var _selection_label: Label
 var _power_label: Label
@@ -48,10 +49,19 @@ func _add_category(parent: Node, category: String) -> void:
 	var card := ScreenUI.card(parent, PartsCatalog.category_label(category))
 	var choices := ScreenUI.responsive_grid(self, card)
 	for part in PartsCatalog.get_parts(category):
+		var option := VBoxContainer.new()
+		option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		option.add_theme_constant_override("separation", 6)
+		choices.add_child(option)
 		var choice := ChoiceCard.new(part)
 		choice.pressed.connect(_select_part.bind(category, part))
-		choices.add_child(choice)
+		option.add_child(choice)
 		_option_buttons[part.id] = choice
+		var lock_label := ScreenUI.label("Unlocks at level %d" % part.unlock_level, 18, ScreenUI.WARNING)
+		lock_label.name = "LockRequirement"
+		lock_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		option.add_child(lock_label)
+		_lock_labels[part.id] = lock_label
 
 
 func _select_part(category: String, part: PartData) -> void:
@@ -74,6 +84,9 @@ func _refresh_summary() -> void:
 		var selected: PartData = GameState.selected_parts.get(category)
 		for part in PartsCatalog.get_parts(category):
 			var choice: PartChoiceCard = _option_buttons[part.id]
+			choice.disabled = part.unlock_level > GameState.level
+			var lock_label: Label = _lock_labels[part.id]
+			lock_label.visible = choice.disabled
 			choice.set_selected(selected != null and selected.id == part.id)
 	_continue_button.disabled = not GameState.has_all_parts()
 	if not GameState.has_all_parts():

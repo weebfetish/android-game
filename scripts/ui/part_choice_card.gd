@@ -83,7 +83,10 @@ func set_selected(selected: bool) -> void:
 
 
 func _update_selection_badge(selected: bool) -> void:
-	_selection_text.text = "SELECTED" if selected else "TAP TO SELECT"
+	if disabled:
+		_selection_text.text = "LOCKED"
+	else:
+		_selection_text.text = "SELECTED" if selected else "TAP TO SELECT"
 	_selection_text.add_theme_color_override("font_color", ScreenUI.ACCENT if selected else ScreenUI.MUTED)
 	# The first update restores saved selections without playing an animation.
 	if not _has_selection_state:

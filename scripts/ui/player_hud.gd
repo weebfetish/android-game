@@ -1,17 +1,23 @@
 class_name PlayerHUD
-extends HBoxContainer
+extends GridContainer
 ## Presentation only: refresh the current session balances when state changes.
 
 var _coins: Label
 var _xp: Label
+var _gems: Label
+var _level: Label
 var _state: Node
 
 
 func _ready() -> void:
 	name = "PlayerHUD"
-	add_theme_constant_override("separation", 8)
+	columns = 2
+	add_theme_constant_override("h_separation", 8)
+	add_theme_constant_override("v_separation", 6)
 	_coins = _counter("COINS", Color("ffd17c"), "CoinsValue")
 	_xp = _counter("XP", Color("7fafff"), "XPValue")
+	_gems = _counter("GEMS", Color("62e3b8"), "GemsValue")
+	_level = _counter("LEVEL", Color("7fafff"), "LevelValue")
 	_state = get_node("/root/GameState")
 	_refresh()
 	_state.state_changed.connect(_refresh)
@@ -39,3 +45,5 @@ func _counter(title: String, color: Color, value_name: String) -> Label:
 func _refresh() -> void:
 	_coins.text = ScreenUI.money(_state.coins)
 	_xp.text = ScreenUI.money(_state.xp)
+	_gems.text = ScreenUI.money(_state.gems)
+	_level.text = str(_state.level)

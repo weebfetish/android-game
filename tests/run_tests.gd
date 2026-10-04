@@ -4,6 +4,7 @@ extends SceneTree
 
 const Catalog = preload("res://scripts/data/parts_catalog.gd")
 const Validator = preload("res://scripts/build_validator.gd")
+const ProgressionChecks = preload("res://tests/progression_tests.gd")
 const ART_PATHS: Dictionary = {
 	"cpu": "res://assets/icons/cpu.png",
 	"motherboard": "res://assets/icons/motherboard.png",
@@ -32,12 +33,25 @@ func _run() -> void:
 	var state: Node = root.get_node_or_null("GameState")
 	_check(state != null, "GameState autoload is available")
 	if state != null:
+		_check(not state.save_enabled, "Headless tests disable the player's ordinary save before running")
+		var original_save_path: String = state.save_path
+		var original_save_enabled: bool = state.save_enabled
+		state.save_path = "user://pc_builder_progression_test_%d_%d.json" % [OS.get_process_id(), Time.get_ticks_usec()]
+		state.save_enabled = false
+		state.reset_progress()
 		_test_rewards(state)
 		_test_deselection(state)
 		await _test_pc_build_slots(state)
 		await _test_scene_flow(state)
 		await _test_responsive_pages(state)
 		await _test_art_pages(state)
+		var progression := ProgressionChecks.new()
+		await progression.run(self, state, _check)
+		for path in [state.save_path, state.save_path + ".tmp", state.save_path + ".bak"]:
+			if FileAccess.file_exists(path):
+				DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+		state.save_path = original_save_path
+		state.save_enabled = original_save_enabled
 	print("\nPrototype tests: %d checks, %d failures." % [_checks, _failures])
 	quit(0 if _failures == 0 else 1)
 
@@ -46,14 +60,14 @@ func _test_catalog() -> void:
 	var seen_ids: Array[String] = []
 	for category in Catalog.CATEGORIES:
 		var parts: Array[PartData] = Catalog.get_parts(category)
-		_check(parts.size() == 2, "Two options exist for %s" % category)
+		_check(parts.size() == 5, "Five options exist for %s" % category)
 		for part in parts:
 			_check(part.category == category, "%s belongs to its category" % part.id)
 			_check(part.price > 0, "%s has a positive price" % part.id)
 			_check(not seen_ids.has(part.id), "%s has a unique ID" % part.id)
 			seen_ids.append(part.id)
 			_check(Catalog.find_part(part.id) != null, "%s can be found by ID" % part.id)
-	_check(seen_ids.size() == 10, "The prototype has ten parts")
+	_check(seen_ids.size() == 25, "The catalog has twenty-five parts")
 	_check(Catalog.get_parts("unknown").is_empty(), "Unknown categories return no parts")
 	_check(Catalog.find_part("unknown") == null, "Unknown IDs return no part")
 	var first: PartData = Catalog.find_part("cpu_s4")
@@ -185,7 +199,8 @@ func _test_rewards(state: Node) -> void:
 
 func _test_deselection(state: Node) -> void:
 	state.start_new_request()
-	state.select_part("cpu", PartData.new("default_cpu", "cpu"))
+	# Direct insertion exercises malformed/default input, which selection rejects.
+	state.selected_parts["cpu"] = PartData.new("default_cpu", "cpu")
 	_check(not state.evaluate_build()["success"],
 		"An incomplete build with default storage interfaces evaluates safely")
 	state.start_new_request()
@@ -243,6 +258,7 @@ func _test_pc_build_slots(state: Node) -> void:
 
 
 func _test_scene_flow(state: Node) -> void:
+	state.reset_progress()
 	var main_scene: PackedScene = load("res://scenes/main.tscn")
 	_check(main_scene != null, "The main scene loads")
 	if main_scene == null:
@@ -310,7 +326,8 @@ func _test_scene_flow(state: Node) -> void:
 		return
 	_check(main.find_child("StartButton", true, false) != null, "The reward screen returns to the main menu")
 
-	if not await _press_button(main, "StartButton"):
+	# Choose the completed study job explicitly; Start now advances progression.
+	if not await _press_button(main, "Job_study"):
 		return
 	if not await _press_button(main, "AcceptButton"):
 		return
@@ -342,6 +359,7 @@ func _test_responsive_pages(state: Node) -> void:
 	var previous_scale_size: Vector2i = root.content_scale_size
 	var main_scene: PackedScene = load("res://scenes/main.tscn")
 	for viewport_size in [Vector2i(360, 800), Vector2i(440, 900)]:
+		state.reset_progress()
 		root.content_scale_size = viewport_size
 		root.size = viewport_size
 		var main: Node = main_scene.instantiate()
@@ -400,7 +418,9 @@ func _run_portrait_flow(main: Node, state: Node, viewport_size: Vector2i) -> voi
 	_check_page_layout(main, "%s reward" % size_name, ["ReplayButton", "MenuButton"])
 	_check(state.coins == coins_before + 5000 and state.xp == xp_before + 100, "Completing the portrait flow pays the existing reward")
 	_check(_wallet_matches_state(main, state), "The portrait reward screen's wallet shows the updated coins and XP")
-	if not await _press_button(main, "ReplayButton"):
+	if not await _press_button(main, "MenuButton"):
+		return
+	if not await _press_button(main, "Job_study"):
 		return
 	if not await _press_button(main, "AcceptButton"):
 		return
@@ -459,7 +479,7 @@ func _test_art_pages(state: Node) -> void:
 	for viewport_size in [Vector2i(1180, 780), Vector2i(360, 800), Vector2i(440, 900)]:
 		root.content_scale_size = viewport_size
 		root.size = viewport_size
-		state.start_new_request()
+		state.start_job("study")
 		var menu: Control = load("res://scenes/screens/main_menu.tscn").instantiate()
 		root.add_child(menu)
 		await _advance_frames()
@@ -486,7 +506,7 @@ func _test_art_pages(state: Node) -> void:
 		await _advance_frames()
 
 		for success in [true, false]:
-			state.start_new_request()
+			state.start_job("study")
 			_select_state_parts(state, _parts() if success else _parts("cpu_s4", "board_a", "ram_ddr5"))
 			state.evaluate_build()
 			var result: Control = load("res://scenes/screens/result_screen.tscn").instantiate()
@@ -543,7 +563,7 @@ func _check_part_icons(shop: Control) -> void:
 				continue
 			correct_textures = correct_textures and icon.texture == expected
 			safe_display = safe_display and icon.stretch_mode == TextureRect.STRETCH_KEEP_ASPECT_CENTERED and icon.expand_mode == TextureRect.EXPAND_IGNORE_SIZE and icon.mouse_filter == Control.MOUSE_FILTER_IGNORE and icon.size.x <= 64 and icon.size.y <= 64
-	_check(correct_textures, "All ten part cards use the correct shared category icon texture")
+	_check(correct_textures, "All twenty-five part cards use the correct shared category icon texture")
 	_check(safe_display, "Part icons stay small, preserve aspect ratio, and leave button input available")
 
 
@@ -615,13 +635,18 @@ func _content_fits_width(node: Node, bounds: Rect2) -> bool:
 
 
 func _choice_grids_have_columns(main: Node, expected_columns: int) -> bool:
-	var grids: Array[Node] = main.find_children("*", "GridContainer", true, false)
-	if grids.size() != Catalog.CATEGORIES.size():
-		return false
-	for grid in grids:
-		if grid.columns != expected_columns:
-			return false
-	return true
+	var category_count: int = 0
+	for grid in main.find_children("*", "GridContainer", true, false):
+		# The wallet also uses a grid; count only grids containing part choices.
+		var has_parts: bool = false
+		for child in grid.find_children("*", "Button", true, false):
+			if child.has_meta("part_id"):
+				has_parts = true
+		if has_parts:
+			category_count += 1
+			if grid.columns != expected_columns:
+				return false
+	return category_count == Catalog.CATEGORIES.size()
 
 
 func _selected_choices_have_badges(main: Node, state: Node) -> bool:
@@ -686,7 +711,8 @@ func _snapshot(parts: Dictionary) -> Dictionary:
 		var part: PartData = parts[category]
 		snapshot[category] = [part.id, part.category, part.price, part.socket,
 			part.ram_type, part.power_draw, part.wattage, part.capacity_gb,
-			part.interface_type, part.supported_storage_interfaces.duplicate()]
+			part.interface_type, part.supported_storage_interfaces.duplicate(),
+			part.cpu_score, part.unlock_level]
 	return snapshot
 
 

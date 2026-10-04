@@ -24,7 +24,7 @@ static func required_power(parts: Dictionary) -> int:
 	return total
 
 
-static func validate(parts: Dictionary, budget: int) -> Dictionary:
+static func validate(parts: Dictionary, budget: int, requirements: Dictionary = {}) -> Dictionary:
 	var reasons: PackedStringArray = []
 	var checks: Array[Dictionary] = []
 	var selection_problems: PackedStringArray = []
@@ -88,6 +88,7 @@ static func validate(parts: Dictionary, budget: int) -> Dictionary:
 	var cost: int = total_cost(parts)
 	_add_check(checks, reasons, cost <= budget, "Customer budget",
 		"Parts cost %d coins. Customer budget: %d coins." % [cost, budget])
+	_add_customer_requirements(checks, reasons, cpu, ram, ssd, requirements)
 
 	return {
 		"success": reasons.is_empty(),
@@ -98,6 +99,28 @@ static func validate(parts: Dictionary, budget: int) -> Dictionary:
 		"psu_wattage": supplied_power,
 		"budget": budget,
 	}
+
+
+static func _add_customer_requirements(
+	checks: Array[Dictionary], reasons: PackedStringArray,
+	cpu: PartData, ram: PartData, ssd: PartData, requirements: Dictionary
+) -> void:
+	if cpu != null and requirements.has("min_cpu_score"):
+		var minimum_score: int = int(requirements["min_cpu_score"])
+		_add_check(checks, reasons, cpu.cpu_score >= minimum_score, "Customer CPU requirement",
+			"CPU score: %d. Customer needs at least %d." % [cpu.cpu_score, minimum_score])
+	if ram != null and requirements.has("min_ram_gb"):
+		var minimum_ram: int = int(requirements["min_ram_gb"])
+		_add_check(checks, reasons, ram.capacity_gb >= minimum_ram, "Customer RAM requirement",
+			"RAM capacity: %d GB. Customer needs at least %d GB." % [ram.capacity_gb, minimum_ram])
+	if ssd != null and requirements.has("min_ssd_gb"):
+		var minimum_storage: int = int(requirements["min_ssd_gb"])
+		_add_check(checks, reasons, ssd.capacity_gb >= minimum_storage, "Customer storage capacity",
+			"SSD capacity: %d GB. Customer needs at least %d GB." % [ssd.capacity_gb, minimum_storage])
+	var required_interface: String = String(requirements.get("storage_interface", ""))
+	if ssd != null and not required_interface.is_empty():
+		_add_check(checks, reasons, ssd.interface_type == required_interface, "Customer storage interface",
+			"SSD interface: %s. Customer requests %s." % [ssd.interface_type, required_interface])
 
 
 static func _part_for_slot(parts: Dictionary, category: String) -> PartData:
