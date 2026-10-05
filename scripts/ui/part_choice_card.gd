@@ -16,6 +16,8 @@ func _init(part: PartData) -> void:
 	set_meta("part_id", part.id)
 	set_meta("category", part.category)
 	toggle_mode = true
+	# Let the page receive finger drags and cancel a tap when scrolling begins.
+	mouse_filter = Control.MOUSE_FILTER_PASS
 	custom_minimum_size.y = 174
 	size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND

@@ -1,6 +1,6 @@
 # PC Builder prototype
 
-A simple 2D educational PC-building simulator for Godot 4.x, written in GDScript. Complete five customer jobs, earn coins and XP, and unlock parts as you level up. Progress saves locally on this PC. The responsive UI uses the supplied workshop background, Mika portrait, and component icons alongside simple panels, text, and buttons. No plugins or external services are required.
+A simple 2D educational PC-building simulator for Godot 4.x, written in GDScript. Complete five customer jobs, earn coins and XP, and unlock parts as you level up. Progress saves locally on this device. The responsive UI uses the supplied workshop background, Mika portrait, and component icons alongside simple panels, text, and buttons. No plugins or external services are required.
 
 ## Run the game
 
@@ -107,6 +107,14 @@ Godot limits imported icons to **256 pixels**, the portrait to **512 pixels**, a
 
 Short, one-shot animations mark screen entrances and selections: cards fade in, Mika's portrait slides a few pixels, selected part icons pop briefly, and the result banner fades in. They settle within a fraction of a second. Buttons stay usable during the animation, and component-card bounds stay fixed. These effects do not change build checks, selection rules, or rewards.
 
+## Android test APK
+
+The **Android Test** export preset prepares a signed debug APK named `pc-builder-debug.apk`, with package ID `org.example.pcbuilder`. It uses the standard Godot APK template, ARM64 and ARMv7, portrait orientation, and visible system bars. Internet, external-storage, custom permissions, and Android data backup are disabled. Touch taps emulate mouse input for the existing buttons; use finger drags to scroll on a phone.
+
+Touch propagation through cards, panels, and buttons was corrected so dragging over them scrolls the page. A Windows Godot swipe probe simulated touchscreen availability for that check only; an 80-pixel swipe scrolled and cancelled the part-card tap. Physical-phone touch verification is still required.
+
+Follow [the Android export and physical-device checklist](docs/android_device_test.md) for matching Godot 4.7.2 templates, Java/SDK setup, debug signing, installation, and save persistence checks. The Android resource pack has been checked for runtime scenes, scripts, theme, and all seven imported images. The development PC currently lacks configured Android export templates, Java, and SDK tools, so an APK build and physical-phone verification remain pending. Portrait-window checks on Windows are separate from Android device testing.
+
 ## Headless checks
 
 Use your Godot executable in place of `godot` below. Run these commands from the project folder. The import step prepares Godot's resource and script-class cache on a fresh checkout.
@@ -124,3 +132,5 @@ For PowerShell with a Godot executable outside `PATH`:
 ```
 
 The suite exits with code `0` when all checks pass and code `1` if a check fails. It covers compatible and incompatible builds, missing or misplaced parts, customer requirement boundaries, budget and PSU boundaries, reward safeguards, XP thresholds, and level locks. It also completes all five customer jobs through the actual buttons at desktop and both portrait sizes. UI checks cover visible footer buttons, horizontal overflow, selection badges, wallet updates, and resizing the shop without losing selections. Art checks cover asset imports, texture reuse, aspect ratio, portrait layout, decorative input handling, and animation settling after rapid selection changes. Save checks use an isolated temporary file to verify real reward autosaving and mid-progression resume, repeated writes and backup recovery, round-tripping, corrupt or invalid data, XP-derived levels, and first-completion gems after loading.
+
+Android readiness checks additionally inject native touch events through Godot's input system to traverse all six screens, verify short swipes cancel button presses, and check phone touch targets and horizontal bounds. Swipe checks temporarily simulate touchscreen availability in the desktop test process. Separate writer and reader processes verify saved progression resumes from an isolated file. The Godot 4.7.2 audit passed **1,250 checks**, including the original 1,116; the rendered touch/save probe passed **134 checks**. These desktop checks do not certify an Android APK or phone lifecycle.

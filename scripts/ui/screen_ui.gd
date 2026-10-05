@@ -179,6 +179,8 @@ static func label(text: String, font_size: int = 20, color: Color = TEXT) -> Lab
 
 static func card(parent: Node, title: String) -> VBoxContainer:
 	var panel := PanelContainer.new()
+	# Decorative panels must not stop touch drags before the page scrolls.
+	panel.mouse_filter = Control.MOUSE_FILTER_PASS
 	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	parent.add_child(panel)
 	var content := VBoxContainer.new()
@@ -217,6 +219,8 @@ static func badge(text: String, color: Color = ACCENT) -> PanelContainer:
 
 static func button(text: String, primary: bool = false) -> Button:
 	var result := Button.new()
+	# Buttons on the job board can also be the starting point of a swipe.
+	result.mouse_filter = Control.MOUSE_FILTER_PASS
 	result.text = text
 	result.custom_minimum_size.y = 60
 	result.size_flags_horizontal = Control.SIZE_EXPAND_FILL
