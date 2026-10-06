@@ -130,7 +130,9 @@ func _reset_selection_pop() -> void:
 
 func _play_selection_sound() -> void:
 	# Refreshing/restoring selection uses set_pressed_no_signal, so it stays quiet.
-	AudioManager.play_part_select()
+	var audio := get_node_or_null("/root/AudioManager")
+	if audio != null:
+		audio.play_part_select()
 
 
 func _ignore_mouse_on_children(parent: Node) -> void:
