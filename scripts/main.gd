@@ -37,4 +37,5 @@ func _show_screen(screen_name: String) -> void:
 	current_screen_name = screen_name
 	current_screen.connect("navigate", _on_navigate)
 	add_child(current_screen)
+	UiMotion.enter_screen(current_screen)
 	_transition_queued = false

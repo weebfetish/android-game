@@ -19,7 +19,13 @@ func run(tree: SceneTree, state: Node, report: Callable) -> void:
 	var preset_loaded: bool = presets.load("res://export_presets.cfg") == OK
 	_expect(preset_loaded, "Android export configuration can be read")
 	if preset_loaded:
-		_expect(presets.get_value("preset.0", "platform", "") == "Android" and presets.get_value("preset.0", "runnable", false),
+		# Godot 4.7 stores the chosen runnable preset in its own section when the
+		# editor resaves exports. Older presets keep the flag on preset.0 instead.
+		var preset_name: String = str(presets.get_value("preset.0", "name", ""))
+		var runnable: bool = bool(presets.get_value("preset.0", "runnable", false))
+		if presets.has_section_key("runnable_presets", "Android"):
+			runnable = not preset_name.is_empty() and presets.get_value("runnable_presets", "Android", "") == preset_name
+		_expect(presets.get_value("preset.0", "platform", "") == "Android" and runnable,
 			"The runnable test export targets Android")
 		_expect(presets.get_value("preset.0", "export_filter", "") == "all_resources",
 			"The Android export includes dynamically loaded gameplay resources")

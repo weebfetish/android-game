@@ -227,6 +227,7 @@ static func button(text: String, primary: bool = false) -> Button:
 	result.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	if primary:
 		result.theme_type_variation = "PrimaryButton"
+	UiMotion.bind_button_feedback(result)
 	return result
 
 

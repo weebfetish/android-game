@@ -87,6 +87,8 @@ A working first build is **StudyChip S4 + StudyBoard A + StudyRAM 8 GB + StudySS
 - `scripts/ui/player_hud.gd` shows coins, XP, gems, and level and updates when the game state changes.
 - `scripts/ui/art_assets.gd` shares cached textures and creates image controls that preserve aspect ratio.
 - `scripts/ui/ui_motion.gd` contains the short entrance fades, portrait slide, and selection pop.
+- `scripts/ui/button_feedback.gd` adds short button tint feedback while preserving native touch targets.
+- `scripts/audio_manager.gd` is the optional `AudioManager` autoload for music and UI sound effects.
 - `scripts/data/part_data.gd` defines the fields on a part.
 - `scripts/data/parts_catalog.gd` defines the twenty-five shop options and their unlock levels. Edit this file to change names, prices, or specifications.
 - `scripts/data/job_data.gd` and `scripts/data/jobs_catalog.gd` define the five customers, requirements, unlock levels, and rewards.
@@ -105,15 +107,19 @@ The supplied images use these normalized paths:
 
 Godot limits imported icons to **256 pixels**, the portrait to **512 pixels**, and the background to **1,280 pixels** on the longest side. Source files remain in `assets/`; the bounded imported textures keep these decorations lightweight. Image controls preserve aspect ratio, and decorative art leaves mouse input available to the buttons.
 
-Short, one-shot animations mark screen entrances and selections: cards fade in, Mika's portrait slides a few pixels, selected part icons pop briefly, and the result banner fades in. They settle within a fraction of a second. Buttons stay usable during the animation, and component-card bounds stay fixed. These effects do not change build checks, selection rules, or rewards.
+Short, one-shot tweens mark each screen entrance with a 0.16-second fade. Mika's portrait keeps its small slide. Buttons briefly tint without scaling their touch targets; selected part icons pop and deselected icons settle gently. Success pulses the status text; failure gives that text a tiny wobble while the educational explanations stay still. Rapid selection changes cancel the earlier icon and badge tweens.
+
+Newly collected rewards count their coin, XP, and gem labels up over 0.45 seconds. The reward is claimed and saved immediately before those visual counters start. Leaving during the count cannot cancel the reward, and reopening an already collected reward displays its final values immediately. The header always shows the actual current balances.
+
+Optional audio expects `assets/audio/music/workshop_theme.ogg` and five WAV files in `assets/audio/sfx/`: `ui_click.wav`, `part_select.wav`, `success.wav`, `failure.wav`, and `reward.wav`. No sound files are bundled yet; missing files remain silent. One music player and three reusable effects players keep resource use bounded. See [audio setup and filenames](docs/audio.md). Haptics are omitted because Godot requires Android's vibration permission for them; export permissions remain unchanged.
 
 ## Android test APK
 
-The **Android Test** export preset prepares a signed debug APK named `pc-builder-debug.apk`, with package ID `org.example.pcbuilder`. It uses the standard Godot APK template, ARM64 and ARMv7, portrait orientation, and visible system bars. Internet, external-storage, custom permissions, and Android data backup are disabled. Touch taps emulate mouse input for the existing buttons; use finger drags to scroll on a phone.
+The checked-in **Android** export preset targets `pc-builder-debug.apk` and retains the configuration used for the working phone build. The project uses the Compatibility renderer, portrait orientation, and responsive UI scaling. Touch taps operate the existing buttons; use finger drags to scroll on a phone. Tests and documentation are excluded from the APK.
 
-Touch propagation through cards, panels, and buttons was corrected so dragging over them scrolls the page. A Windows Godot swipe probe simulated touchscreen availability for that check only; an 80-pixel swipe scrolled and cancelled the part-card tap. Physical-phone touch verification is still required.
+Touch events propagate through cards, panels, and buttons so dragging over them scrolls the page. The automated swipe probe simulates touchscreen availability on Windows and verifies that a swipe scrolls and cancels the part-card tap.
 
-Follow [the Android export and physical-device checklist](docs/android_device_test.md) for matching Godot 4.7.2 templates, Java/SDK setup, debug signing, installation, and save persistence checks. The Android resource pack has been checked for runtime scenes, scripts, theme, and all seven imported images. The development PC currently lacks configured Android export templates, Java, and SDK tools, so an APK build and physical-phone verification remain pending. Portrait-window checks on Windows are separate from Android device testing.
+The prototype has been reported working on a real Android phone. This presentation pass was verified in rendered portrait windows on Windows; the updated APK still needs a phone smoke test after re-exporting with the existing preset. The earlier [Android device checklist](docs/android_device_test.md) contains installation and save persistence checks; its initial setup notes describe the configuration before the successful device test.
 
 ## Headless checks
 
@@ -133,4 +139,6 @@ For PowerShell with a Godot executable outside `PATH`:
 
 The suite exits with code `0` when all checks pass and code `1` if a check fails. It covers compatible and incompatible builds, missing or misplaced parts, customer requirement boundaries, budget and PSU boundaries, reward safeguards, XP thresholds, and level locks. It also completes all five customer jobs through the actual buttons at desktop and both portrait sizes. UI checks cover visible footer buttons, horizontal overflow, selection badges, wallet updates, and resizing the shop without losing selections. Art checks cover asset imports, texture reuse, aspect ratio, portrait layout, decorative input handling, and animation settling after rapid selection changes. Save checks use an isolated temporary file to verify real reward autosaving and mid-progression resume, repeated writes and backup recovery, round-tripping, corrupt or invalid data, XP-derived levels, and first-completion gems after loading.
 
-Android readiness checks additionally inject native touch events through Godot's input system to traverse all six screens, verify short swipes cancel button presses, and check phone touch targets and horizontal bounds. Swipe checks temporarily simulate touchscreen availability in the desktop test process. Separate writer and reader processes verify saved progression resumes from an isolated file. The Godot 4.7.2 audit passed **1,250 checks**, including the original 1,116; the rendered touch/save probe passed **134 checks**. These desktop checks do not certify an Android APK or phone lifecycle.
+Android readiness checks additionally inject native touch events through Godot's input system to traverse all six screens, verify short swipes cancel button presses, and check phone touch targets and horizontal bounds. Swipe checks temporarily simulate touchscreen availability in the desktop test process. Separate writer and reader processes verify saved progression resumes from an isolated file.
+
+Presentation checks cover immediate navigation, unchanged touch targets, rapid selection and deselection, animation settlement, readable failure reasons, intermediate reward counts, saved rewards when leaving during animation, repeated reward views, missing audio, the fixed sound-player pool, and background audio pause/resume. The Godot 4.7.2 suite passed **1,519 checks**; the rendered touch/save/presentation probe passed **404 checks** at **360 x 800** and **440 x 900**. Visual inspection covered all six screens at both sizes. These desktop checks do not certify an Android APK or phone lifecycle.

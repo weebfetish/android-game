@@ -5,7 +5,8 @@ signal navigate(screen_name: String)
 
 func _ready() -> void:
 	var was_claimed: bool = GameState.reward_claimed
-	GameState.claim_reward()
+	# Claim and save immediately. Animation only displays the already awarded values.
+	var newly_claimed: bool = GameState.claim_reward()
 	var has_reward: bool = GameState.reward_claimed
 	var job: JobData = GameState.get_current_job()
 	var title := "%s complete" % job.use_case if has_reward else "No reward yet"
@@ -13,10 +14,25 @@ func _ready() -> void:
 	var body := ScreenUI.create_page(self, 5, "REWARD", title, subtitle)
 	if has_reward:
 		var reward_card := ScreenUI.card(body, "Your reward")
-		reward_card.add_child(ScreenUI.badge("JOB COMPLETE"))
-		reward_card.add_child(ScreenUI.label("+%s coins" % ScreenUI.money(GameState.reward_coins), 32, ScreenUI.ACCENT))
-		reward_card.add_child(ScreenUI.label("+%s XP" % ScreenUI.money(GameState.reward_xp), 26, ScreenUI.BLUE))
-		reward_card.add_child(ScreenUI.label("+%d %s" % [GameState.last_reward_gems, "gem" if GameState.last_reward_gems == 1 else "gems"], 24, ScreenUI.WARNING))
+		var completion_badge := ScreenUI.badge("JOB COMPLETE")
+		completion_badge.name = "RewardCompleteBadge"
+		reward_card.add_child(completion_badge)
+		var coins_label := ScreenUI.label("+%s coins" % ScreenUI.money(GameState.reward_coins), 32, ScreenUI.ACCENT)
+		coins_label.name = "RewardCoins"
+		reward_card.add_child(coins_label)
+		var xp_label := ScreenUI.label("+%s XP" % ScreenUI.money(GameState.reward_xp), 26, ScreenUI.BLUE)
+		xp_label.name = "RewardXP"
+		reward_card.add_child(xp_label)
+		var gems_suffix := " gem" if GameState.last_reward_gems == 1 else " gems"
+		var gems_label := ScreenUI.label("+%d%s" % [GameState.last_reward_gems, gems_suffix], 24, ScreenUI.WARNING)
+		gems_label.name = "RewardGems"
+		reward_card.add_child(gems_label)
+		if newly_claimed:
+			UiMotion.count_label(coins_label, GameState.reward_coins, " coins")
+			UiMotion.count_label(xp_label, GameState.reward_xp, " XP")
+			UiMotion.count_label(gems_label, GameState.last_reward_gems, gems_suffix)
+			_animate_completion.call_deferred(completion_badge.get_child(0))
+			AudioManager.play_reward()
 		reward_card.add_child(ScreenUI.label("%s's %s is ready to use." % [job.name, job.use_case.to_lower().replace(" pc", " PC")], 20, ScreenUI.MUTED))
 		if was_claimed:
 			reward_card.add_child(ScreenUI.label("Already collected. Your totals have not increased again.", 18, ScreenUI.MUTED))
@@ -43,6 +59,11 @@ func _ready() -> void:
 	menu_button.name = "MenuButton"
 	menu_button.pressed.connect(_open_menu)
 	actions.add_child(menu_button)
+
+
+func _animate_completion(completion_text: Control) -> void:
+	if is_instance_valid(completion_text) and completion_text.is_inside_tree():
+		UiMotion.pulse(completion_text)
 
 
 func _replay() -> void:

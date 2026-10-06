@@ -7,6 +7,7 @@ var _selection_text: Label
 var _selection_badge: PanelContainer
 var _icon: TextureRect
 var _selection_tween: Tween
+var _badge_tween: Tween
 var _last_selected: bool = false
 var _has_selection_state: bool = false
 
@@ -26,6 +27,7 @@ func _init(part: PartData) -> void:
 	add_theme_stylebox_override("hover", _card_style(Color("1a2b3e"), ScreenUI.ACCENT))
 	add_theme_stylebox_override("pressed", _card_style(Color("173b36"), ScreenUI.ACCENT, 2))
 	add_theme_stylebox_override("hover_pressed", _card_style(Color("204a42"), ScreenUI.ACCENT, 2))
+	add_theme_stylebox_override("disabled", _card_style(Color("101823"), Color("263244")))
 	add_theme_stylebox_override("focus", _card_style(Color.TRANSPARENT, ScreenUI.BLUE, 2))
 
 	var margin := MarginContainer.new()
@@ -69,6 +71,7 @@ func _init(part: PartData) -> void:
 	_content.minimum_size_changed.connect(_update_minimum_height)
 	resized.connect(_update_minimum_height)
 	toggled.connect(_update_selection_badge)
+	pressed.connect(_play_selection_sound)
 	_update_minimum_height()
 
 
@@ -85,6 +88,7 @@ func set_selected(selected: bool) -> void:
 
 
 func _update_selection_badge(selected: bool) -> void:
+	_content.modulate = Color(1.0, 1.0, 1.0, 0.52) if disabled else Color.WHITE
 	if disabled:
 		_selection_text.text = "LOCKED"
 	else:
@@ -99,9 +103,18 @@ func _update_selection_badge(selected: bool) -> void:
 		return
 	_last_selected = selected
 	_reset_selection_pop()
-	if selected and is_inside_tree():
+	if is_inside_tree():
 		_icon.pivot_offset = _icon.size * 0.5
-		_selection_tween = UiMotion.pop(_icon)
+		if selected:
+			_selection_tween = UiMotion.pop(_icon)
+		else:
+			# A small settle happens inside the icon frame, never on the touch target.
+			_icon.scale = Vector2.ONE * 0.97
+			_selection_tween = create_tween().set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+			_selection_tween.tween_property(_icon, "scale", Vector2.ONE, 0.16)
+		_selection_badge.modulate = Color(1.12, 1.12, 1.12) if selected else Color(0.9, 0.9, 0.9)
+		_badge_tween = create_tween().set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+		_badge_tween.tween_property(_selection_badge, "modulate", Color.WHITE, 0.16)
 
 
 func _reset_selection_pop() -> void:
@@ -109,6 +122,15 @@ func _reset_selection_pop() -> void:
 		_selection_tween.kill()
 	_selection_tween = null
 	_icon.scale = Vector2.ONE
+	if _badge_tween != null and _badge_tween.is_valid():
+		_badge_tween.kill()
+	_badge_tween = null
+	_selection_badge.modulate = Color.WHITE
+
+
+func _play_selection_sound() -> void:
+	# Refreshing/restoring selection uses set_pressed_no_signal, so it stays quiet.
+	AudioManager.play_part_select()
 
 
 func _ignore_mouse_on_children(parent: Node) -> void:

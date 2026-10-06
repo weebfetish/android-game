@@ -6,6 +6,7 @@ const Catalog = preload("res://scripts/data/parts_catalog.gd")
 const Validator = preload("res://scripts/build_validator.gd")
 const ProgressionChecks = preload("res://tests/progression_tests.gd")
 const AndroidChecks = preload("res://tests/android_input_tests.gd")
+const PresentationChecks = preload("res://tests/presentation_tests.gd")
 const ART_PATHS: Dictionary = {
 	"cpu": "res://assets/icons/cpu.png",
 	"motherboard": "res://assets/icons/motherboard.png",
@@ -42,6 +43,9 @@ func _run() -> void:
 		state.reset_progress()
 		var android := AndroidChecks.new()
 		await android.run(self, state, _check)
+		state.reset_progress()
+		var presentation := PresentationChecks.new()
+		await presentation.run(self, state, _check)
 		state.reset_progress()
 		_test_rewards(state)
 		_test_deselection(state)

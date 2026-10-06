@@ -14,6 +14,10 @@ func _ready() -> void:
 		body.add_child(ScreenUI.label("No build has been checked yet. Choose your parts and press Build PC.", 20))
 	else:
 		_add_status_banner(body, result, success)
+		if success:
+			AudioManager.play_success()
+		else:
+			AudioManager.play_failure()
 		if not success:
 			var reasons_card := ScreenUI.card(body, "What to fix")
 			for reason in result.get("reasons", PackedStringArray()):
@@ -62,8 +66,12 @@ func _add_status_banner(parent: Node, result: Dictionary, success: bool) -> void
 	var banner_panel: PanelContainer = banner.get_parent()
 	banner_panel.name = "ResultBanner"
 	banner_panel.add_theme_stylebox_override("panel", style)
-	banner.add_child(ScreenUI.badge("BUILD VERIFIED" if success else "BUILD NEEDS CHANGES", status_color))
-	banner.add_child(ScreenUI.label("SUCCESS" if success else "FAILURE", 32, status_color))
+	var status_badge := ScreenUI.badge("BUILD VERIFIED" if success else "BUILD NEEDS CHANGES", status_color)
+	status_badge.name = "ResultStatusBadge"
+	banner.add_child(status_badge)
+	var status_title := ScreenUI.label("SUCCESS" if success else "FAILURE", 32, status_color)
+	status_title.name = "ResultStatus"
+	banner.add_child(status_title)
 	if success:
 		banner.add_child(ScreenUI.label("All checks passed.", 24))
 		var job: JobData = GameState.get_current_job()
@@ -74,6 +82,17 @@ func _add_status_banner(parent: Node, result: Dictionary, success: bool) -> void
 		banner.add_child(ScreenUI.label("Change the highlighted parts, then check your PC again.", 20))
 	# A short fade marks the report without moving layout or delaying its buttons.
 	UiMotion.fade_in(banner_panel)
+	# Only the status text moves; educational explanations stay still and readable.
+	_animate_status.call_deferred(status_title, success)
+
+
+func _animate_status(status_title: Label, success: bool) -> void:
+	if not is_instance_valid(status_title) or not status_title.is_inside_tree():
+		return
+	if success:
+		UiMotion.pulse(status_title)
+	else:
+		UiMotion.shake(status_title)
 
 
 func _add_checks(parent: Node, checks: Array) -> void:
